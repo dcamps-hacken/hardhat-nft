@@ -28,5 +28,6 @@ module.exports = async function ({ getNamedAccounts, deployments }) {
         subscriptionId,
         networkConfig[chainId].gasLane,
         networkConfig[chainId].mintFee,
+        networkConfig[chainId].callbackGasLimit,
     ]
 }
