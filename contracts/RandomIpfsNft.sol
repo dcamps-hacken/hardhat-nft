@@ -4,30 +4,41 @@ pragma solidity ^0.8.7;
 
 import "@chainlink/contracts/src/v0.8/interfaces/VRFCoordinatorV2Interface.sol";
 import "@chainlink/contracts/src/v0.8/VRFConsumerBaseV2.sol";
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 error RandomIpdsNft__RangeOutOfBounds();
-error RandomIpfsNft__NeedMoreETHSent();
-error RandomIpfsNft__TransferFailed();
 
-contract RandomIpfsNft is VRFConsumerBaseV2, ERC721URIStorage, Ownable {
-    enum Breed {
-        PUG,
-        SHIBA_INU,
-        ST_BERNARD
+contract PokemonNft is VRFConsumerBaseV2, ERC721URIStorage, Ownable {
+    enum Rarity {
+        NORMAL,
+        RARE,
+        MYTHIC
     }
 
+    struct Character {
+        uint256 power;
+        uint256 health;
+        uint256 attack;
+        uint256 defense:
+        string name;
+    }
+
+    Character[] public characters;
+
+    // VRF Helpers
+    mapping(uint256 => string) public s_requestToCharacterName;
+    mapping(uint256 => address) public s_requestIdToSender;
+
+    AggregatorV3Interface private i_priceFeed;
     VRFCoordinatorV2Interface private immutable i_vrfCoordinator;
     uint64 private immutable i_subscriptionId;
     bytes32 private immutable i_gasLane;
     uint32 private immutable i_callbackGasLimit;
     uint16 private constant REQUEST_CONFIRMATIONS = 3;
-    uint32 private constant NUM_WORDS = 1;
-    uint256 internal immutable i_mintFee;
-
-    // VRF Helpers
-    mapping(uint256 => address) public s_requestIdToSender;
+    uint32 private constant NUM_WORDS = 3;
+    
 
     // NFT Variables
     uint256 private s_tokenCounter;
@@ -35,29 +46,26 @@ contract RandomIpfsNft is VRFConsumerBaseV2, ERC721URIStorage, Ownable {
     string[] internal s_dogTokenUris;
 
     /* Events */
-    event NftRequested(uint256 indexed requestId, address requester);
+    event characterRequest(uint256 indexed requestId, address requester);
     event NftMinted(Breed dogBreed, address minter);
 
     constructor(
-        address vrfCoordinatorV2,
-        uint64 subscriptionId,
-        bytes32 gasLane,
-        uint32 callbackGasLimit,
-        string[3] memory dogTokenUris,
-        uint256 mintFee
-    ) VRFConsumerBaseV2(vrfCoordinatorV2) ERC721("Random IPFS NFT", "RIN") {
-        i_vrfCoordinator = VRFCoordinatorV2Interface(vrfCoordinatorV2);
-        i_subscriptionId = subscriptionId;
-        i_gasLane = gasLane;
-        i_callbackGasLimit = callbackGasLimit;
-        s_dogTokenUris = dogTokenUris;
-        i_mintFee = mintFee;
+        address _vrfCoordinatorV2,
+        uint64 _subscriptionId,
+        bytes32 _gasLane,
+        uint32 _callbackGasLimit,
+        address _priceFeed,
+        string[3] memory _dogTokenUris,
+    ) VRFConsumerBaseV2(_vrfCoordinatorV2) ERC721("PokemonNFT", "PKM") {
+        i_vrfCoordinator = VRFCoordinatorV2Interface(_vrfCoordinatorV2);
+        i_priceFeed = AggregatorV3Interface(_priceFeed);
+        i_subscriptionId = _subscriptionId;
+        i_gasLane = _gasLane;
+        i_callbackGasLimit = _callbackGasLimit;
+        s_dogTokenUris = _dogTokenUris;
     }
 
-    function requestNft() public payable returns (uint256 requestId) {
-        if (msg.value < i_mintFee) {
-            revert RandomIpfsNft__NeedMoreETHSent();
-        }
+    function requestCharacter(string memory name) public payable returns (uint256 requestId) {
         requestId = i_vrfCoordinator.requestRandomWords(
             i_gasLane,
             i_subscriptionId,
@@ -66,29 +74,40 @@ contract RandomIpfsNft is VRFConsumerBaseV2, ERC721URIStorage, Ownable {
             NUM_WORDS
         );
         s_requestIdToSender[requestId] = msg.sender;
-        emit NftRequested(requestId, msg.sender);
+        s_requestToCharacterName[requestId] = name;
+        emit characterRequest(uint256 requestId, msg.sender);
+        return requestId;
     }
 
     function fulfillRandomWords(uint256 requestId, uint256[] memory randomWords)
         internal
         override
     {
+        uint256 newTokenId = characters.length;
+        uint256 power = (getLatestPrice()/1e16);
+        uint256 health = randomNumber[0] % 100;
+        uint256 attack = randomNumber[1] % 100;
+        uint256 defense = randomNumber[2] % 100;
+        Character memory character = Character(
+            power, 
+            health, 
+            attack, 
+            defense, 
+            s_requestToCharacterName[requestId]
+        );
+        characters.push(character);
+        _safeMint(s_requestIdToSender[requestId], newTokenId);
+        
         //the caller of this function is a chainlink node, so we cannot use msg.sender as the owner
-        address dogOwner = s_requestIdToSender[requestId];
-        uint256 newTokenId = s_tokenCounter;
-        uint256 moddedRng = randomWords[0] % MAX_CHANCE_VALUE;
         Breed dogBreed = getBreedFromModdedRng(moddedRng);
-        _safeMint(dogOwner, newTokenId);
+        
         _setTokenURI(newTokenId, s_dogTokenUris[uint256(dogBreed)]);
         emit NftMinted(dogBreed, dogOwner);
     }
 
-    function withdraw() public onlyOwner {
-        uint256 amount = address(this).balance;
-        (bool success, ) = payable(msg.sender).call{value: amount}("");
-        if (!success) {
-            revert RandomIpfsNft__TransferFailed();
-        }
+    function getLatestPrice() public view returns (int){
+        (,int price,,) = priceFeed.latestRoundData();
+        return price;
     }
 
     function getBreedFromModdedRng(uint256 moddedRng)
