@@ -7,7 +7,6 @@ require("solidity-coverage")
 require("hardhat-deploy")
 
 const RINKEBY_RPC_URL = process.env.RINKEBY_RPC_URL
-const MUMBAI_RPC_URL = process.env.MUMBAI_RPC_URL
 const PRIVATE_KEY = process.env.PRIVATE_KEY
 const COINMARKETCAP_API_KEY = process.env.COINMARKETCAP_API_KEY
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY
@@ -25,12 +24,6 @@ module.exports = {
             url: RINKEBY_RPC_URL,
             accounts: [PRIVATE_KEY],
             chainId: 4,
-            blockConfirmations: 4,
-        },
-        mumbai: {
-            url: MUMBAI_RPC_URL,
-            accounts: [PRIVATE_KEY],
-            chainId: 80001,
             blockConfirmations: 4,
         },
         localhost: {

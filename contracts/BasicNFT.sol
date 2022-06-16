@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.7;
 
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Storage.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 
 contract BasicNft is ERC721 {
     string public constant TOKEN_URI =
